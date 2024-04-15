@@ -31,7 +31,7 @@ class VQVAE_Env(gym.Env):
     - get_state(): Returns the current state of the environment.
     """
 
-    def __init__(
+    def __init__(  # TODO: Take alpha and beta as hyperparameters --> once we have the surrogate model
         self,
         embed_dim,
         num_embeddings,
@@ -93,19 +93,21 @@ class VQVAE_Env(gym.Env):
             )
             return None, None, True, False, {}
 
-        # Convert the action to a tuple
-        action = (
-            action_input // self.embed_dim,
-            action_input % self.embed_dim,
-        )
-
-        # Check if the action is valid
-        assert self.validate_action(action), "Illegal Action - Action is out of bounds."
-
-        # Extract the action
-        codebook_number, codebook_index = action
-
         if action_input != self.terminal_action:
+
+            # Convert the action to a tuple
+            action = (
+                action_input // self.embed_dim,
+                action_input % self.embed_dim,
+            )
+
+            # Check if the action is valid
+            assert self.validate_action(
+                action
+            ), "Illegal Action - Action is out of bounds."
+
+            # Extract the action
+            codebook_number, codebook_index = action
 
             # Update the state with the action
             self.state[codebook_index] = self.codebook[codebook_number][
@@ -164,7 +166,7 @@ class VQVAE_Env(gym.Env):
             0 <= codebook_index < self.embed_dim
         )
 
-    def calculate_reward(self):
+    def calculate_reward(self):  # We can add alpha and beta hyperparameters, for defining the linear combination
         decoded_state = self.decoder.decode(self.state)  # Decode the state
         accuracy = self.surrogate_model.evaluate(
             decoded_state
