@@ -2,6 +2,50 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 from collections import deque
+import torch
+from stable_baselines3.common.callbacks import BaseCallback
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
+import datetime
+
+
+class RenderCallback(BaseCallback):
+    def __init__(self, render_every: int, verbose=0):
+        super(RenderCallback, self).__init__(verbose)
+        self.render_every = render_every
+        self.episode_count = 0
+        self.states = []  # Intialize the list to track states for an episode
+
+    def _on_training_start(self) -> None:
+        """Called before the first rollout starts."""
+        # print("Training is starting...")
+        self.states = []  # Ensure states list is empty at the start
+
+    def _on_step(self) -> bool:
+        # Track the next_state
+        # print(self.locals)
+        # print("step")
+        next_state = self.locals[
+            "obs_tensor"
+        ]  # Assuming 'new_obs' contains the next state information
+        next_state = next_state["latent_vector"]
+        self.states.append(next_state.numpy())
+        return True
+
+    def _on_rollout_end(self):
+        # Process states at the end of each episode
+        # print("Rollout end")
+        np.save("states.npy", np.array(self.states))
+        self.episode_count += 1
+        if self.episode_count % self.render_every == 0:
+            self.training_env.render()
+
+        self.states = []  # Reset the state tracker for the new episode
+
+    def _on_training_end(self) -> None:
+        """Called at the end of training."""
+        # print("Training is complete.")
+        self.states = []  # Clean up the states list
 
 
 class VQVAE_Env(gym.Env):
@@ -40,6 +84,9 @@ class VQVAE_Env(gym.Env):
         decoder,
         codebook,
         num_previous_actions=4,
+        render_mode="human",
+        render_labels=None,
+        render_data=None,
     ):
         super().__init__()
 
@@ -79,6 +126,10 @@ class VQVAE_Env(gym.Env):
                 ),
             }
         )
+
+        self.render_mode = render_mode
+        self.render_labels = render_labels
+        self.render_data = render_data
 
         # Reset the environment
         self.reset()
@@ -166,14 +217,18 @@ class VQVAE_Env(gym.Env):
             0 <= codebook_index < self.embed_dim
         )
 
-    def calculate_reward(self):  # We can add alpha and beta hyperparameters, for defining the linear combination
-        decoded_state = self.decoder.decode(self.state)  # Decode the state
+    def calculate_reward(
+        self,
+    ):  # We can add alpha and beta hyperparameters, for defining the linear combination
+        decoded_state = self.decoder(torch.from_numpy(self.state))  # Decode the state
+        if decoded_state.dim() == 1:
+            decoded_state = decoded_state.unsqueeze(0)
         accuracy = self.surrogate_model.evaluate(
             decoded_state
         )  # Calculate the accuracy
         reward = accuracy - self.previous_accuracy  # Reward is the change in accuracy
         self.previous_accuracy = accuracy  # Update the previous accuracy
-        return reward
+        return float(reward[0])  # TODO: FIXXX THISSSS!!!!!!!!
 
     def reset(self, seed=None):
 
@@ -208,8 +263,81 @@ class VQVAE_Env(gym.Env):
     def get_state(self):
         return self.state
 
-    def render(self):
-        pass
+    def render(self, mode="human"):
+        if mode == "human":
+            states = np.load("states.npy")
+            states = np.squeeze(states, axis=1)
+            print("Rendering the environment...")
+            if self.render_data is not None and self.render_labels is not None:
+                latent_vectors = np.load(self.render_data)
+                labels = np.load(self.render_labels)
+                codebook = self.codebook.numpy()
+                print(latent_vectors.shape, codebook.shape, states.shape)
+                tsne = TSNE(n_components=2, random_state=42)
+                all_vectors = np.vstack(
+                    [latent_vectors, codebook, states]
+                )  # Include states for TSNE
+                all_vectors_2d = tsne.fit_transform(all_vectors)
+
+                # Extract transformed latent vectors, codebook vectors, and states
+                latent_vectors_2d = all_vectors_2d[: len(latent_vectors)]
+                codebook_vectors_2d = all_vectors_2d[len(latent_vectors) : -len(states)]
+                states_2d = all_vectors_2d[-len(states) :]
+
+                plt.figure(figsize=(12, 8))
+                scatter = plt.scatter(
+                    latent_vectors_2d[:, 0],
+                    latent_vectors_2d[:, 1],
+                    c=labels,
+                    cmap="tab10",
+                    alpha=0.6,
+                )
+                plt.scatter(
+                    codebook_vectors_2d[:, 0],
+                    codebook_vectors_2d[:, 1],
+                    color="black",
+                    marker="x",
+                )  # Codebook vectors in black
+
+                plt.plot(
+                    states_2d[:, 0],
+                    states_2d[:, 1],
+                    color="red",
+                    linestyle="-",
+                    linewidth=2,
+                    marker="o",
+                    markersize=4,
+                )
+
+                # Create a legend for the labels
+                unique_labels = np.unique(labels)
+                colors = scatter.cmap(np.linspace(0, 1, len(unique_labels)))
+                legend_handles = [
+                    plt.Line2D(
+                        [0],
+                        [0],
+                        marker="o",
+                        color="w",
+                        label=str(int(label)),
+                        markersize=10,
+                        markerfacecolor=color,
+                    )
+                    for label, color in zip(unique_labels, colors)
+                ]
+                plt.legend(handles=legend_handles, title="Labels")
+
+                plt.title(
+                    "t-SNE Visualization of Latent Vectors, Codebook Vectors, and Trajectories"
+                )
+                plt.xlabel("t-SNE Component 1")
+                plt.ylabel("t-SNE Component 2")
+                plt.grid(True)
+                now = datetime.datetime.now()
+                timestamp_str = now.strftime("%Y%m%d_%H%M%S")
+                plt.savefig(f"latent_space_{timestamp_str}.png")
+        else:
+            print("Rendering mode not supported.")
+            super().render(mode=mode)
 
     def close(self):
         pass
