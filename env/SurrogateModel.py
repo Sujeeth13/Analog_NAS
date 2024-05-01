@@ -13,6 +13,7 @@ class SurrogateModel:
         # Load the model
         self.model = xgb.Booster()
         self.model.load_model(load_path)
+        print("Surrogate model loaded from: ", load_path)
 
         # Define the min and max values for each column
         self.min_values = torch.tensor(
@@ -83,7 +84,7 @@ class SurrogateModel:
 
         # Use the model to make predictions
         predictions = self.model.predict(dtest)
-
+        print("Predictions: ", predictions)
         return predictions
 
     def clip_values(self, X):

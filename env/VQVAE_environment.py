@@ -7,6 +7,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import datetime
+import os
 
 
 class RenderCallback(BaseCallback):
@@ -35,16 +36,19 @@ class RenderCallback(BaseCallback):
     def _on_rollout_end(self):
         # Process states at the end of each episode
         # print("Rollout end")
-        np.save("states.npy", np.array(self.states))
-        self.episode_count += 1
-        if self.episode_count % self.render_every == 0:
-            self.training_env.render()
+        # np.save("states.npy", np.array(self.states))
+        # self.episode_count += 1
+        # if self.episode_count % self.render_every == 0:
+        #     self.training_env.render()
 
-        self.states = []  # Reset the state tracker for the new episode
+        # self.states = []  # Reset the state tracker for the new episode
+        pass
 
     def _on_training_end(self) -> None:
         """Called at the end of training."""
         # print("Training is complete.")
+        np.save("states.npy", np.array(self.states))
+        self.training_env.render()
         self.states = []  # Clean up the states list
 
 
@@ -83,10 +87,12 @@ class VQVAE_Env(gym.Env):
         surrogate_model,
         decoder,
         codebook,
+        consider_previous_actions=False,
         num_previous_actions=4,
         render_mode="human",
         render_labels=None,
         render_data=None,
+        log_dir="trainingLogs",
     ):
         super().__init__()
 
@@ -105,6 +111,7 @@ class VQVAE_Env(gym.Env):
         self.decoder = decoder  # decoder to be convert state representation to that the surrogate model can understand
         self.codebook = codebook  # codebook to be used for taking actions
         self.num_previous_actions = num_previous_actions  # number of previous actions to be used for state representation
+        self.consider_previous_actions = consider_previous_actions
 
         # Action space is a tuple (codebook_number, codebook_index)
         self.action_space = spaces.Discrete(
@@ -113,23 +120,38 @@ class VQVAE_Env(gym.Env):
 
         # Observation space is now a tuple of the latent vector and action history
 
-        self.observation_space = spaces.Dict(
-            {
-                "latent_vector": spaces.Box(
-                    low=-np.inf, high=np.inf, shape=(self.embed_dim,), dtype=np.float32
-                ),
-                "action_history": spaces.Box(
-                    low=-1,
-                    high=(self.num_codebook_vectors * self.embed_dim),
-                    shape=(self.num_previous_actions,),
-                    dtype=np.int32,
-                ),
-            }
-        )
+        if self.consider_previous_actions:
+            self.observation_space = spaces.Dict(
+                {
+                    "latent_vector": spaces.Box(
+                        low=-np.inf,
+                        high=np.inf,
+                        shape=(self.embed_dim,),
+                        dtype=np.float32,
+                    ),
+                    "action_history": spaces.Box(
+                        low=-1,
+                        high=(self.num_codebook_vectors * self.embed_dim),
+                        shape=(self.num_previous_actions,),
+                        dtype=np.int32,
+                    ),
+                }
+            )
+        else:
+            self.observation_space = spaces.Box(
+                low=-np.inf, high=np.inf, shape=(self.embed_dim,), dtype=np.float32
+            )
 
         self.render_mode = render_mode
         self.render_labels = render_labels
         self.render_data = render_data
+        self.tsne = TSNE(n_components=2, random_state=42)
+        self.log_dir = log_dir
+        current_path = os.getcwd()
+        self.log_dir = os.path.join(current_path, self.log_dir)
+        os.makedirs(self.log_dir, exist_ok=True)
+        self.log_dir = os.path.join(self.log_dir, "render")
+        os.makedirs(self.log_dir, exist_ok=True)
 
         # Reset the environment
         self.reset()
@@ -164,7 +186,8 @@ class VQVAE_Env(gym.Env):
             self.state[codebook_index] = self.codebook[codebook_number][
                 codebook_index
             ]  # might want to index codebook as self.codebook[codebook_number, codebook_index] instead!
-            self.action_history.append(action_input)
+            if self.consider_previous_actions:
+                self.action_history.append(action_input)
             self.step_count += 1
 
             # Calculate the reward
@@ -173,16 +196,19 @@ class VQVAE_Env(gym.Env):
             # Check if the maximum number of actions has been reached
             done = self.step_count >= self.max_allowed_actions
 
-            # Convert action_history deque to a numpy array and reshape
-            action_history_array = np.array(
-                list(self.action_history), dtype=np.int32
-            ).flatten()
+            if self.consider_previous_actions:
+                # Convert action_history deque to a numpy array and reshape
+                action_history_array = np.array(
+                    list(self.action_history), dtype=np.int32
+                ).flatten()
 
-            # Update the observation state
-            obs_state = {
-                "latent_vector": self.state,
-                "action_history": action_history_array,
-            }
+                # Update the observation state
+                obs_state = {
+                    "latent_vector": self.state,
+                    "action_history": action_history_array,
+                }
+            else:
+                obs_state = self.state
 
             # Check if the episode is done
             if done:
@@ -201,13 +227,16 @@ class VQVAE_Env(gym.Env):
             done = True
             reward = 0.0  # No reward for the terminal action
             # Ensure action_history is correctly formatted even at episode end
-            action_history_array = np.array(
-                list(self.action_history), dtype=np.int32
-            ).flatten()
-            obs_state = {
-                "latent_vector": self.state,
-                "action_history": action_history_array,
-            }
+            if self.consider_previous_actions:
+                action_history_array = np.array(
+                    list(self.action_history), dtype=np.int32
+                ).flatten()
+                obs_state = {
+                    "latent_vector": self.state,
+                    "action_history": action_history_array,
+                }
+            else:
+                obs_state = self.state
             self.is_episode_done = True
             return obs_state, reward, done, False, {}
 
@@ -236,24 +265,27 @@ class VQVAE_Env(gym.Env):
         self.np_random, seed = gym.utils.seeding.np_random(seed)
 
         self.state = self.np_random.normal(size=self.embed_dim).astype(np.float32)
-        self.action_history = deque(
-            [-1] * self.num_previous_actions, maxlen=self.num_previous_actions
-        )
+        if self.consider_previous_actions:
+            self.action_history = deque(
+                [-1] * self.num_previous_actions, maxlen=self.num_previous_actions
+            )
         self.step_count = 0
         self.previous_accuracy = 0.0  # Initial accuracy (assuming 0)
         self.is_episode_done = False
 
-        # Convert action_history deque to a numpy array for the observation
-        # Reshape to ensure it matches the expected shape (num_previous_actions, 1)
-        action_history_array = np.array(
-            list(self.action_history), dtype=np.int32
-        ).flatten()
+        if self.consider_previous_actions:
+            # Convert action_history deque to a numpy array and reshape
+            action_history_array = np.array(
+                list(self.action_history), dtype=np.int32
+            ).flatten()
 
-        # Update the observation state
-        obs_state = {
-            "latent_vector": self.state,
-            "action_history": action_history_array,
-        }
+            # Update the observation state
+            obs_state = {
+                "latent_vector": self.state,
+                "action_history": action_history_array,
+            }
+        else:
+            obs_state = self.state
 
         return obs_state, {}
 
@@ -266,6 +298,7 @@ class VQVAE_Env(gym.Env):
     def render(self, mode="human"):
         if mode == "human":
             states = np.load("states.npy")
+            print(states.shape)
             states = np.squeeze(states, axis=1)
             print("Rendering the environment...")
             if self.render_data is not None and self.render_labels is not None:
@@ -273,17 +306,16 @@ class VQVAE_Env(gym.Env):
                 labels = np.load(self.render_labels)
                 codebook = self.codebook.numpy()
                 print(latent_vectors.shape, codebook.shape, states.shape)
-                tsne = TSNE(n_components=2, random_state=42)
                 all_vectors = np.vstack(
                     [latent_vectors, codebook, states]
                 )  # Include states for TSNE
-                all_vectors_2d = tsne.fit_transform(all_vectors)
+                all_vectors_2d = self.tsne.fit_transform(all_vectors)
 
                 # Extract transformed latent vectors, codebook vectors, and states
                 latent_vectors_2d = all_vectors_2d[: len(latent_vectors)]
                 codebook_vectors_2d = all_vectors_2d[len(latent_vectors) : -len(states)]
-                states_2d = all_vectors_2d[-len(states) :]
-
+                all_states_2d = all_vectors_2d[-len(states) :]
+            for i in range(len(all_states_2d) // 100):
                 plt.figure(figsize=(12, 8))
                 scatter = plt.scatter(
                     latent_vectors_2d[:, 0],
@@ -298,7 +330,7 @@ class VQVAE_Env(gym.Env):
                     color="black",
                     marker="x",
                 )  # Codebook vectors in black
-
+                states_2d = all_states_2d[i * 100 : i * 100 + 100]
                 plt.plot(
                     states_2d[:, 0],
                     states_2d[:, 1],
@@ -334,7 +366,7 @@ class VQVAE_Env(gym.Env):
                 plt.grid(True)
                 now = datetime.datetime.now()
                 timestamp_str = now.strftime("%Y%m%d_%H%M%S")
-                plt.savefig(f"latent_space_{timestamp_str}.png")
+                plt.savefig(f"{self.log_dir}/latent_space_{timestamp_str}.png")
         else:
             print("Rendering mode not supported.")
             super().render(mode=mode)
