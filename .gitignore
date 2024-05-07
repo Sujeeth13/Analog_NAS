@@ -1,0 +1,4 @@
+__pycache__/
+extra_files/
+trainingLogs/
+wandb/

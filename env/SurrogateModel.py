@@ -84,7 +84,7 @@ class SurrogateModel:
 
         # Use the model to make predictions
         predictions = self.model.predict(dtest)
-        print("Predictions: ", predictions)
+        # print("Predictions: ", predictions)
         return predictions
 
     def clip_values(self, X):
