@@ -59,8 +59,8 @@ This approach harnesses the power of RL to systematically and efficiently explor
 #### RL agent initial training trajectories
 
 <div style="display:flex">
-<img src="figures/RL_agent_trajec.jpeg" style="width:50%;margin:5px"/>
-<img src="figures/RL_agent_trajec_2.jpeg" style="width:50%;margin:5px"/>
+<img src="figures/RL_agent_trajec.jpeg" style="width:48%;margin:5px"/>
+<img src="figures/RL_agent_trajec_2.jpeg" style="width:48%;margin:5px"/>
 </div>
 
 - Initial Training Phase Graphs, each colored line indicates a different trajectory. 
@@ -71,8 +71,8 @@ This approach harnesses the power of RL to systematically and efficiently explor
 Mean episode reward and length plots
 
 <div style="display:flex">
-<img src="figures/RL_ep_reward.jpeg" style="width:50%;margin:5px"/>
-<img src="figures/RL_ep_len.jpeg" style="width:50%;margin:5px"/>
+<img src="figures/RL_ep_reward.jpeg" style="width:48%;margin:5px"/>
+<img src="figures/RL_ep_len.jpeg" style="width:48%;margin:5px"/>
 </div>
 
 ## Team Members
