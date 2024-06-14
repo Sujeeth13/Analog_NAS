@@ -18,7 +18,7 @@ def train(args):
     data_loader = DataLoader(dataset, batch_size=2, shuffle=True)
 
     x_dim = len(OPERATIONS)
-    model = SVQVAE(x_dim,.,args.embed_dim,num_embeddings=args.num_embeddings,
+    model = SVQVAE(x_dim,args.embed_dim,num_embeddings=args.num_embeddings,
                    commitment_cost=args.commitment_cost,divergence_cost=args.divergence_cost,
                    h_nodes=args.h_nodes,num_heads=args.num_heads)
 
@@ -26,7 +26,7 @@ if __name__ == 'main':
     parser = argparse.ArgumentParser(description="vqvae train")
     parser.add_argument('--batch_size', default=16, type=int, help='Batch size')
     parser.add_argument('--epochs', default=5, type=int)
-    parser.add_argument('--data_path',default='nasbench_dataset.pt',type=str, help='path to the nasbench data')
+    parser.add_argument('--data_path',default='./nasbench_dataset.pt',type=str, help='path to the nasbench data')
     parser.add_argument('--lr',default=1e-4,type=float)
     parser.add_argument('--wd',default=1e-3,type=float)
     parser.add_argument('--embed_dim',default=10,type=int)

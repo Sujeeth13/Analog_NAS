@@ -1,14 +1,16 @@
 import torch
 import torch.nn as nn
 
+VERTICES = 7
+
 class Decoder(nn.Module):
-    def __init__(self, out_dim, num_nodes, embed_dim=10, h_nodes=128, dropout=0.2, num_layers=1):
+    def __init__(self, out_dim, embed_dim=10, h_nodes=128, dropout=0.2, num_layers=1):
         super(Decoder, self).__init__()
-        self.num_nodes = num_nodes
+        self.num_nodes = VERTICES
         self.mlp = nn.Sequential(
             nn.Linear(embed_dim, h_nodes),
             nn.ReLU(),
-            nn.Linear(h_nodes, out_dim * num_nodes)
+            nn.Linear(h_nodes, out_dim * VERTICES)
         )
         self.relu = nn.ReLU()
 
