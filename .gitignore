@@ -1,7 +1,7 @@
 extra_files/
 trainingLogs/
 wandb
-nasbench_dataset.pt
+vqvae/nasbench_dataset.pt
 
 # Compiled source #
 ###################

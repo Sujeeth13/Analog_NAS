@@ -1,10 +1,11 @@
+import torch
 import torch.nn as nn
 from decoder import Decoder
 from encoder import Encoder
 from quantizer import VectorQuantizerClass
 
 class SVQVAE(nn.Module):
-  def __init__(self,x_dim,embed_dim=10,dropout=0.2,num_embeddings=50,
+  def __init__(self,x_dim,embed_dim=10,dropout=0.2,num_embeddings=19,
                commitment_cost=0.25,divergence_cost=0.1,h_nodes=128,scale=2,num_heads=4,num_layers=1):
     super(SVQVAE,self).__init__()
     self.encoder = Encoder(x_dim,embed_dim,dropout=dropout,h_nodes=h_nodes,num_heads=num_heads,
@@ -13,10 +14,13 @@ class SVQVAE(nn.Module):
     self.decoder = Decoder(x_dim,embed_dim,h_nodes=h_nodes,dropout=dropout,
                            num_layers=num_layers)
 
-  def forward(self,x,y):
+  def forward(self,x):
     node = x.x
     edges = x.edge_index
-    z = self.encoder(node,edges)
+    y = x.y.long()
+    print(y)
+    batch = x.batch
+    z = self.encoder(node,edges,batch)
     loss, quantized_z, perplexity, close_indices = self.quantizer(z,y)
     node_recon, adj_recon = self.decoder(quantized_z)
     return loss, node_recon, adj_recon, perplexity, close_indices

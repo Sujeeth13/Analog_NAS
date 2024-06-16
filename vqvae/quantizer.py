@@ -19,12 +19,13 @@ class VectorQuantizerClass(nn.Module):
     codebook_vectors = self.embeddings.weight.unsqueeze(0) # [num_embeddings, embed_dim] -> [1,num_embeddings, embed_dim]
     distances = torch.norm(latent_vectors - codebook_vectors, dim=2) # [B,num_embeddings]
 
+    print(y)
     encoding_indices = torch.reshape(y,(y.shape[0], 1))
-    encodings = torch.zeros(encoding_indices.shape[0], self.num_embeddings).to(device)
+    encodings = torch.zeros(encoding_indices.shape[0], self.num_embeddings).to(x.device)
     encodings.scatter_(1, encoding_indices, 1)
 
     close_indices = torch.argmin(distances, dim=1).unsqueeze(1)
-    close_encodings = torch.zeros(close_indices.shape[0], self.num_embeddings).to(device)
+    close_encodings = torch.zeros(close_indices.shape[0], self.num_embeddings).to(x.device)
     close_encodings.scatter_(1, close_indices, 1)
 
     indicator = 1 - (encoding_indices == close_indices).int()
