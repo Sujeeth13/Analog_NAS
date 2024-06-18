@@ -55,10 +55,10 @@ def train(args):
 
             # Edge reconstruction loss
             original_adjacency = []
-            for i in range(batch.batch.max().item() + 1):
+            for j in range(batch.batch.max().item() + 1):
                 adj = torch.zeros((VERTICES,VERTICES),device = device)
                 edges = unbatch_edge_index(batch.edge_index,batch.batch)
-                edges = edges[i]
+                edges = edges[j]
                 adj[edges[0],edges[1]] = 1
                 original_adjacency.append(adj)
 
@@ -85,13 +85,13 @@ def train(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="vqvae train")
-    parser.add_argument('--batch_size', default=2, type=int, help='Batch size')
+    parser.add_argument('--batch_size', default=64, type=int, help='Batch size')
     parser.add_argument('--epochs', default=5, type=int)
     parser.add_argument('--data_path',default='nasbench_dataset.pt',type=str, help='path to the nasbench data')
     parser.add_argument('--lr',default=1e-4,type=float)
     parser.add_argument('--wd',default=1e-3,type=float)
     parser.add_argument('--embed_dim',default=10,type=int)
-    parser.add_argument('--num_embeddings',default=19,type=int)
+    parser.add_argument('--num_embeddings',default=20,type=int)
     parser.add_argument('--commitment_cost',default=0.25,type=float)
     parser.add_argument('--divergence_cost',default=0.1,type=float)
     parser.add_argument('--h_nodes',default=32,type=float)

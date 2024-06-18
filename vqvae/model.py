@@ -18,7 +18,6 @@ class SVQVAE(nn.Module):
     node = x.x
     edges = x.edge_index
     y = x.y.long()
-    print(y)
     batch = x.batch
     z = self.encoder(node,edges,batch)
     loss, quantized_z, perplexity, close_indices = self.quantizer(z,y)
