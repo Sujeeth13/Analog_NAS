@@ -79,3 +79,10 @@ Mean episode reward and length plots
 
 - [Sujeeth Bhavanam](https://github.com/Sujeeth13)
 - [Tawab Safi](https://github.com/asaficontact)
+
+
+## Timeline 
+- Implement Parameter Version [Due: 31 July 2024]
+- Implement Tile Version  [Due: 11 August 2024 ]
+- Do best practices analysis based on latent space [Due: 18 August 2024]
+- Writeup [Due: 31 August 2024]
