@@ -33,8 +33,10 @@ class RenderCallback(BaseCallback):
     def _on_step(self) -> bool:
         # Track the next_state
         next_state = self.locals["obs_tensor"]
-        next_state = next_state["latent_vector"]
-        self.states.append(next_state.numpy())
+        if isinstance(next_state, dict) and "latent_vector" in next_state:
+            next_state = next_state["latent_vector"]
+        next_state = next_state.numpy()
+        self.states.append(next_state)
 
         # Check if the terminal action is taken
         if "done" in self.locals and self.locals["done"]:
@@ -50,7 +52,7 @@ class RenderCallback(BaseCallback):
     def _on_rollout_end(self):
         # Process states at the end of each episode
         # print("Rollout end")
-        # np.save("states.npy", np.array(self.states))
+        # np.save("env/render/states.npy", np.array(self.states))
         # self.episode_count += 1
         # if self.episode_count % self.render_every == 0:
         #     self.training_env.render()
@@ -61,8 +63,8 @@ class RenderCallback(BaseCallback):
     def _on_training_end(self) -> None:
         """Called at the end of training."""
         # print("Training is complete.")
-        np.save("states.npy", np.array(self.states))
-        np.save("episode_lengths.npy", np.array(self.episode_len_list))
+        np.save("env/render/states.npy", np.array(self.states))
+        np.save("env/render/episode_lengths.npy", np.array(self.episode_len_list))
         print("Episode lengths: ", self.episode_len_list)
         self.training_env.render()
         self.states = []  # Clean up the states list
@@ -162,7 +164,9 @@ class VQVAE_Env(gym.Env):
         self.render_mode = render_mode
         self.render_labels = render_labels
         self.render_data = render_data
-        self.tsne = TSNE(n_components=2, random_state=42)
+        self.tsne = TSNE(
+            n_components=2, random_state=42
+        )  # TODO: Do we need to keep the same random state? an why are the n_compenents set to 2? (hard coded, instead of taken in as a variable?)
         self.log_dir = log_dir
         current_path = os.getcwd()
         self.log_dir = os.path.join(current_path, self.log_dir)
@@ -183,6 +187,9 @@ class VQVAE_Env(gym.Env):
             )
             return None, None, True, False, {}
 
+        if isinstance(action_input, (np.ndarray, list)):
+            action_input = action_input[0]
+
         if action_input != self.terminal_action:
 
             # Convert the action to a tuple
@@ -200,9 +207,10 @@ class VQVAE_Env(gym.Env):
             codebook_number, codebook_index = action
 
             # Update the state with the action
-            self.state[codebook_index] = self.codebook[codebook_number][
-                codebook_index
+            self.state[codebook_index] = self.codebook[
+                codebook_number, codebook_index
             ]  # might want to index codebook as self.codebook[codebook_number, codebook_index] instead!
+
             if self.consider_previous_actions:
                 self.action_history.append(action_input)
             self.step_count += 1
@@ -314,11 +322,11 @@ class VQVAE_Env(gym.Env):
 
     def render(self, mode="human"):
         if mode == "human":
-            states = np.load("states.npy")
+            states = np.load("env/render/states.npy")
             print(states.shape)
             states = np.squeeze(states, axis=1)
 
-            ep_len_states = np.load("episode_lengths.npy")
+            ep_len_states = np.load("env/render/episode_lengths.npy")
             print(
                 "states.shape, ep_len_states.shape", states.shape, ep_len_states.shape
             )

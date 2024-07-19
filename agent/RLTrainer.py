@@ -10,7 +10,7 @@ import wandb
 from wandb.integration.sb3 import WandbCallback
 from stable_baselines3.common.monitor import Monitor
 from env.SurrogateModel import SurrogateModel
-from env.Decoder import Decoder
+from env.vqvae.decoder import Decoder
 from env.environment import VQVAE_Env, RenderCallback
 from stable_baselines3.common.vec_env import DummyVecEnv
 
@@ -46,8 +46,9 @@ class Trainer:
         # Load Surrogate Model and Codebook
         self.surrogate_model = SurrogateModel(surrogate_path)
         self.codebook = torch.load(
-            codebook_path, map_location="cpu"
-        )  # Change this if you want to run on other device than CPU
+            codebook_path,
+            map_location="cpu",  # TODO: Change this to a parameter in the future to allow for GPU training
+        )
         print("Codebook loaded from: ", codebook_path)
 
         # Load Decoder
@@ -169,17 +170,17 @@ class Trainer:
         elif self.model_config["model"] == "A2C":
             self.model = A2C.load(load_path)
 
-    def evaluate_accuracy(
-        self, num_episodes=10, num_steps=500, find_max=False, make_plot=False
-    ):
+    def evaluate_accuracy(self, num_episodes=10, make_plot=False):
+
         max_accuracy = float("-inf")
         state_at_max_accuracy = None
 
-        accuracy = []
+        accuracy_list = []
         if make_plot:
             obs_list = []
             episode_len_list = []
             episode_len = 0
+
         for i in range(num_episodes):
             obs = self.env.reset()
             done = False
@@ -190,8 +191,9 @@ class Trainer:
             if make_plot and episode_len != 0:
                 episode_len_list.append(episode_len)
             episode_len = 0
+            num_steps = 0
             print(f"Episode {i}")
-            for j in range(num_steps):
+            while not done:
                 if make_plot:
                     if self.env_config["consider_previous_actions"]:
                         obs_list.append(obs["latent_vector"])
@@ -199,46 +201,76 @@ class Trainer:
                         obs_list.append(obs)
                     episode_len += 1
                 action, _ = self.model.predict(obs, deterministic=True)
-                obs, rewards, done, info = self.env.step(action)
-                cum_reward += rewards
+                # print("action:", action)
+
+                obs, reward, done, info = self.env.step(
+                    action
+                )  # Note: Should this be obs, rewards, done, truncated, info = self.env.step(action) instead? --> nope as done = truncated or terminated  based on SB3 VecEnv documentation: https://stable-baselines3.readthedocs.io/en/master/guide/vec_envs.html
+                num_steps += 1
+
+                # print("Reward Type:", type(reward))
+                # print("rewards:", reward)
+                # print("done:", done)
+
+                cum_reward += reward
+                cum_reward = (
+                    cum_reward.item()
+                    if isinstance(cum_reward, (np.ndarray, list))
+                    else cum_reward
+                )
+                max_reward = (
+                    max_reward.item()
+                    if isinstance(max_reward, (np.ndarray, list))
+                    else max_reward
+                )
+                # print("cum_reward:", cum_reward)
+
                 # print(
                 #     f"reward: {rewards}, action: {action}, cum_reward: {cum_reward}, max_reward: {max_reward}"
                 # )
+
                 if max_reward < cum_reward:
                     max_reward = cum_reward
                     max_action = action
                     if self.env_config["consider_previous_actions"]:
-                        max_obs_state = obs["latent_vector"]
+                        max_obs_state = obs[
+                            "latent_vector"
+                        ]  # TODO: Why is this not being used? Should it be used? or else we should just get rid of this part of the code
                     else:
                         max_obs_state = obs
+                    # print(f"$$$Max Reward: {max_reward}, Max Action: {max_action}")
 
                 if done:
                     print(
-                        f"Episode {i},{j}: cum reward: {cum_reward}, max reward: {max_reward} action: {max_action} last action: {action}"
+                        f"Episode {i},{num_steps}: cum reward: {cum_reward}, max reward: {max_reward}, max action: {max_action}, last action: {action}"
                     )
                     break
-            if self.env_config["consider_previous_actions"]:
-                rl_output = torch.tensor(obs["latent_vector"], dtype=torch.float32)
-            else:
-                rl_output = torch.tensor(obs, dtype=torch.float32)
+            # if self.env_config["consider_previous_actions"]:
+            #     rl_output = torch.tensor(obs["latent_vector"], dtype=torch.float32)
+            # else:
+            #     rl_output = torch.tensor(obs, dtype=torch.float32)
+            rl_output = torch.tensor(max_obs_state, dtype=torch.float32)
 
             decoder_output = self.decoder_model(rl_output)
-            calculate_accuracy = self.surrogate_model.evaluate(decoder_output)[0]
-            accuracy.append(calculate_accuracy)
+            calculated_accuracy = self.surrogate_model.evaluate(decoder_output)[0]
+            accuracy_list.append(calculated_accuracy)
 
-            if find_max and calculate_accuracy > max_accuracy:
-                max_accuracy = calculate_accuracy
+            if calculated_accuracy > max_accuracy:
+                max_accuracy = calculated_accuracy
                 state_at_max_accuracy = decoder_output
 
-            print(f"Episode {i}: Accuracy: {calculate_accuracy}")
+            print(
+                f"Episode {i}: Episode Accuracy: {calculated_accuracy}, Max Accuracy till Episode: {max_accuracy}"
+            )
 
-        print(f"Average Accuracy: {np.mean(accuracy)}")
-
-        if find_max:
-            print(f"Max Accuracy: {max_accuracy}")
-            return state_at_max_accuracy
+        print(f"Average Accuracy: {np.mean(accuracy_list)}")
 
         if make_plot:
-            np.save("states.npy", np.array(obs_list))
-            np.save("episode_lengths.npy", np.array(episode_len_list))
+            np.save("env/render/states.npy", np.array(obs_list))
+            np.save("env/render/episode_lengths.npy", np.array(episode_len_list))
             self.env.render()
+
+        return state_at_max_accuracy
+
+    def calculate_accuracy_for_decoded_state(self, decoded_state):
+        return self.surrogate_model.evaluate(decoded_state)[0]
