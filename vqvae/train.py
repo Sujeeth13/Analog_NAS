@@ -20,7 +20,13 @@ OPERATIONS = [INPUT, OUTPUT, CONV1X1, CONV3X3, MAXPOOL3X3]
 def train(args):
     data = torch.load(args.data_path)
     dataset = NASBenchDataset(nasbench_data=data)
-    train_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+
+    train_size = int(0.8 * len(dataset))
+    val_size = len(dataset) - train_size
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=True)
 
     device  = 'cpu'
     if torch.cuda.is_available():
@@ -34,7 +40,8 @@ def train(args):
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
 
     criterion_reconstruction = nn.CrossEntropyLoss()
-    criterion_edge_reconstruction = nn.BCELoss()
+    pos_weight = torch.tensor([0.8], dtype=torch.float32).to(device)
+    criterion_edge_reconstruction = nn.BCEWithLogitsLoss(pos_weight = pos_weight)
 
     model.train()
     train_adj_recon_error = []
@@ -82,6 +89,39 @@ def train(args):
                 print('Average adj_recon_error: %.3f' % np.mean(train_adj_recon_error[-10:]))
                 print('Average perplexity: %.3f' % np.mean(train_res_perplexity[-10:]))
                 print()
+    
+    model.eval()
+    for i, batch in enumerate(val_loader):  # Iterate over all batches in the dataset
+        batch = batch.to(device)
+
+        # noise = torch.rand(batch.size()).to(device)
+        vq_loss, node_recon, adj_recon, perplexity, close_indices = model(batch)
+
+        # Reconstruction loss for node features
+        loss_reconstruction = criterion_reconstruction(node_recon.view(-1, 5), batch.x.argmax(dim=1))
+
+        # Edge reconstruction loss
+        original_adjacency = []
+        for j in range(batch.batch.max().item() + 1):
+            adj = torch.zeros((VERTICES,VERTICES),device = device)
+            edges = unbatch_edge_index(batch.edge_index,batch.batch)
+            edges = edges[j]
+            adj[edges[0],edges[1]] = 1
+            original_adjacency.append(adj)
+
+        original_adjacency = torch.stack(original_adjacency).to(device)
+        loss_edge_reconstruction = criterion_edge_reconstruction(adj_recon, original_adjacency)
+
+        # Total loss
+        loss = loss_reconstruction + loss_edge_reconstruction + vq_loss
+
+        print(adj_recon)
+        print(original_adjacency)
+        print("--------------")
+        print(node_recon)
+        print(batch.x)
+        break
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="vqvae train")

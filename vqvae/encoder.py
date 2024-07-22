@@ -6,14 +6,18 @@ class Encoder(nn.Module):
     def __init__(self, inp_dim, embed_dim=10, h_nodes=128, dropout=0.2, num_heads=4, num_layers=1):
         super(Encoder, self).__init__()
         self.gat = GATv2Conv(inp_dim, h_nodes, heads=num_heads, concat=True, dropout=dropout)
+        self.gat2 = GATv2Conv(h_nodes * num_heads, 2 * h_nodes, heads=num_heads, concat=True, dropout=dropout)
+        self.gat3 = GATv2Conv( 2 * h_nodes * num_heads, 4 * h_nodes, heads=num_heads, concat=True, dropout=dropout)
         self.mlp = nn.Sequential(
-            nn.Linear(h_nodes * num_heads, h_nodes),
+            nn.Linear(4 * h_nodes * num_heads, h_nodes),
             nn.ReLU(),
             nn.Linear(h_nodes, embed_dim)
         )
 
     def forward(self, x, edge_index, batch):
         x = self.gat(x, edge_index)
+        x = self.gat2(x, edge_index)
+        x = self.gat3(x, edge_index)
         x = global_mean_pool(x, batch)  # Global pooling
         x = self.mlp(x)
         return x

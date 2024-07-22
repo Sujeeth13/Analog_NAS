@@ -8,9 +8,14 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         self.num_nodes = VERTICES
         self.mlp = nn.Sequential(
-            nn.Linear(embed_dim, h_nodes),
+            nn.Linear(embed_dim, 4* h_nodes),
             nn.ReLU(),
-            nn.Linear(h_nodes, out_dim * VERTICES)
+            nn.Linear(4* h_nodes, 2* h_nodes),
+            nn.ReLU(),
+            nn.Linear(2* h_nodes, h_nodes),
+            nn.ReLU(),
+            nn.Linear(h_nodes, out_dim * VERTICES),
+            nn.Sigmoid()
         )
         self.relu = nn.ReLU()
 
@@ -18,5 +23,5 @@ class Decoder(nn.Module):
         batch_size = x.size(0)
         x = self.mlp(x)
         node_features = x.view(batch_size, self.num_nodes, -1)  # Reshape to (B, num_nodes, out_dim)
-        adjacency_matrix = torch.sigmoid(torch.matmul(node_features, node_features.transpose(1, 2)))
+        adjacency_matrix = torch.matmul(node_features, node_features.transpose(1, 2))
         return node_features, adjacency_matrix
