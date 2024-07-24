@@ -2,9 +2,8 @@ import numpy as np
 import pandas as pd
 import torch
 import xgboost as xgb
-from sklearn.metrics import mean_squared_error  
+from sklearn.metrics import root_mean_squared_error  
 from sklearn.model_selection import train_test_split
-
 
 # Need to convert Conv Block in the way surrogate model can understand
 class SurrogateModel:
@@ -82,8 +81,8 @@ class SurrogateModel:
 
     
     def train_model(self, 
-                    data_path = 'data/dataset_cifar10_v1.csv', 
-                    save_path = 'env/models/surrogate_model2.json', 
+                    data_path = '../../data/dataset_cifar10_v1.csv', 
+                    save_path = '../models/surrogate_model2.json', 
                     params = None, 
                     num_round = 150):
         # Load the data
@@ -124,7 +123,7 @@ class SurrogateModel:
 
         # Make predictions on the test set
         predictions = self.model.predict(dtest)
-        rmse = mean_squared_error(y_test, predictions, squared=False)
+        rmse = root_mean_squared_error(y_test, predictions)
         print(f"Root Mean Squared Error: {rmse}")
 
         # Save the model
@@ -183,3 +182,7 @@ class SurrogateModel:
         )
 
         return df
+
+if __name__ == '__main__':
+    model = SurrogateModel()
+    model.train_model()
