@@ -9,7 +9,7 @@ from stable_baselines3.common.env_util import make_vec_env
 import wandb
 from wandb.integration.sb3 import WandbCallback
 from stable_baselines3.common.monitor import Monitor
-from env.SurrogateModel import SurrogateModel
+from env.surrogate.SurrogateModel import SurrogateModel
 from env.vqvae.decoder import Decoder
 from env.environment import VQVAE_Env, RenderCallback
 from stable_baselines3.common.vec_env import DummyVecEnv
