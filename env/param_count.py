@@ -352,7 +352,7 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 if __name__ == '__main__':
-    df = pd.read_csv("../data/dataset_cifar10_v1.csv")
+    df = pd.read_csv("data/dataset_cifar10_v1.csv")
     df = df.iloc[:,:-3]
     df.head()
 
