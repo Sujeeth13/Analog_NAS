@@ -134,13 +134,10 @@ class SurrogateModel:
 
         X = self.clip_values(X)
 
-        print("X: ", X)
-        print("X dtype: ", X.dtypes)
-
         total_params = None
 
         if consider_max_params: 
-            config = self.parse_model_representation(X)
+            config = self.parse_model_representation(X.iloc[0, :])
             total_params = self.calc_total_params(config)
 
         # Convert the input to DMatrix, which is the internal data structure used by XGBoost
@@ -198,7 +195,7 @@ class SurrogateModel:
         """add each column element to the dictionary"""
         config = {}
         for idx,val in df.items():
-            if type(val) == float:
+            if type(val) == np.float32:
                 val = int(val)
             config[idx] = val
         return config
@@ -234,10 +231,8 @@ class SurrogateModel:
         return sum([self.calc_basic_block_params(in_channels if i == 0 else out_channels, out_channels, filter_size, res_branches, use_skip and i == 0) for i in range(n_blocks)])
 
     def calc_total_params(self, config, input_dim=(3, 32, 32), classes=10):
-        print("Config: ", config)
         out_channel0 = config["out_channel0"]
         M = config["M"]
-        print("M: ", M)
         R = [config[f"R{i+1}"] for i in range(M)]
         widen_factors = [config[f"widenfact{i+1}"] for i in range(M)]
         B = [config[f"B{i+1}"] for i in range(M)]

@@ -16,6 +16,7 @@ import functools
 
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 import gc
 
@@ -86,6 +87,24 @@ def calc_total_params(config, input_dim=(3, 32, 32), classes=10):
 
     return total_params
 
+def plot_hist(data, xlab, title):
+    """
+    Plots a histogram of the given data using the Freedman-Diaconis rule to determine the bin size.
+    
+    Parameters:
+        data (list): List of data points to plot.
+        xlab (str): Label for the x-axis.
+        title (str): Title of the plot.
+    """
+    
+    # Plot the histogram
+    plt.hist(data, bins=250)
+    plt.xlabel(xlab)
+    plt.ylabel('Frequency')
+    plt.title(title)
+    plt.savefig(f"test.png")
+
+
 if __name__ == '__main__':
     df = pd.read_csv("../data/dataset_cifar10_v1.csv")
     df = df.iloc[:,:-3]
@@ -95,14 +114,20 @@ if __name__ == '__main__':
     classes = 10
     cnt = 0
     info = {}
+    total_param_list = []
     min_params = np.inf
     max_params = 0
     for i in range(len(df)):
         config = parse_model_representation(df.iloc[i,:])
         total_params = calc_total_params(config)
+        if total_params < 1e9:
+            total_param_list.append(total_params)
         if total_params < min_params:
             min_params = total_params
         if total_params > max_params:
             max_params = total_params
     print(f"Min params: {min_params}")
     print(f"Max params: {max_params}")
+    plot_hist(total_param_list, "Total Params", "Total Params Distribution");
+
+

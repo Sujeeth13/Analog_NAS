@@ -108,8 +108,8 @@ class VQVAE_Env(gym.Env):
         codebook,
         consider_max_params = False, 
         consider_previous_actions=False,
-        max_params = 60000000,
-        min_params = 55426,
+        max_params = 1e9,
+        min_params = 1e7,
         num_previous_actions=4,
         render_mode="human",
         render_labels=None,
@@ -160,7 +160,12 @@ class VQVAE_Env(gym.Env):
                         shape=(self.num_previous_actions,),
                         dtype=np.int32,
                     ),
-                    "max_num_params": spaces.Discrete(self.max_params)
+                    "max_num_params": spaces.Box(
+                        low = self.min_params,
+                        high = self.max_params,
+                        shape=(1,),
+                        dtype=np.int32
+                    )
                 }
             )
         elif self.consider_previous_actions:
@@ -189,15 +194,18 @@ class VQVAE_Env(gym.Env):
                         shape=(self.embed_dim,),
                         dtype=np.float32,
                     ),
-                    "max_num_params": spaces.Discrete(self.max_params)
+                    "max_num_params": spaces.Box(
+                        low = self.min_params,
+                        high = self.max_params,
+                        shape=(1,),
+                        dtype=np.int32
+                    )
                 }
             )
-            print('observation_space max', self.observation_space)
         else:
             self.observation_space = spaces.Box(
                 low=-np.inf, high=np.inf, shape=(self.embed_dim,), dtype=np.float32
             )
-            print('observation_space normal', self.observation_space)
 
         self.render_mode = render_mode
         self.render_labels = render_labels
@@ -259,7 +267,18 @@ class VQVAE_Env(gym.Env):
             # Check if the maximum number of actions has been reached
             done = self.step_count >= self.max_allowed_actions
 
-            if self.consider_previous_actions:
+            if self.consider_previous_actions and self.consider_max_params:
+                # Convert action_history deque to a numpy array and reshape
+                action_history_array = np.array(
+                    list(self.action_history), dtype=np.int32
+                ).flatten()
+                # Update the observation state
+                obs_state = {
+                    "latent_vector": self.state,
+                    "action_history": action_history_array,
+                    "max_num_params": self.max_num_params
+                }
+            elif self.consider_previous_actions:
                 # Convert action_history deque to a numpy array and reshape
                 action_history_array = np.array(
                     list(self.action_history), dtype=np.int32
@@ -270,6 +289,14 @@ class VQVAE_Env(gym.Env):
                     "latent_vector": self.state,
                     "action_history": action_history_array,
                 }
+            
+            elif self.consider_max_params:
+                # Update the observation state
+                obs_state = {
+                    "latent_vector": self.state,
+                    "max_num_params": self.max_num_params
+                }
+
             else:
                 obs_state = self.state
 
@@ -339,7 +366,7 @@ class VQVAE_Env(gym.Env):
             )
         
         if self.consider_max_params:
-            self.max_num_params = torch.randint(low=self.min_params, high=self.max_params + 1, size=(1,)).item()
+            self.max_num_params = np.random.randint(low=self.min_params, high=self.max_params + 1, size=(1,), dtype=np.int32)
         self.step_count = 0
         self.previous_accuracy = 0.0  # Initial accuracy (assuming 0)
         self.is_episode_done = False
@@ -371,7 +398,6 @@ class VQVAE_Env(gym.Env):
                     "latent_vector": self.state,
                     "max_num_params": self.max_num_params
                 }
-            print("obs_state", obs_state)
           
         else:
             obs_state = self.state
