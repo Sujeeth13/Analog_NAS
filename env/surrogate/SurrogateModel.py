@@ -131,9 +131,18 @@ class SurrogateModel:
         self.model.save_model(save_path)
         print("Surrogate model saved to: ", save_path)
 
-    def evaluate(self, X):
+    def evaluate(self, X, consider_max_params = False):
 
         X = self.clip_values(X)
+
+        print("X: ", X)
+        print("X dtype: ", X.dtypes)
+
+        total_params = None
+
+        if consider_max_params: 
+            config = self.parse_model_representation(X)
+            total_params = self.calc_total_params(config)
 
         # Convert the input to DMatrix, which is the internal data structure used by XGBoost
         dtest = xgb.DMatrix(X, enable_categorical=True)
@@ -141,7 +150,8 @@ class SurrogateModel:
         # Use the model to make predictions
         predictions = self.model.predict(dtest)
         # print("Predictions: ", predictions)
-        return predictions
+
+        return predictions, total_params
 
     def clip_values(self, X):
         # Shape of X = (batch_size, 22)
@@ -183,3 +193,75 @@ class SurrogateModel:
         )
 
         return df
+    
+
+    def parse_model_representation(self, df):
+        """add each column element to the dictionary"""
+        config = {}
+        for idx,val in df.items():
+            if type(val) == float:
+                val = int(val)
+            config[idx] = val
+        return config
+
+    def calc_conv_params(self, in_channels, out_channels, kernel_size):
+        return (kernel_size ** 2) * in_channels * out_channels
+
+    def calc_bn_params(self, num_features):
+        return 2 * num_features
+
+    def calc_fc_params(self, in_features, out_features):
+        return (in_features * out_features) + out_features
+
+    def calc_residual_branch_params(self, in_channels, out_channels, filter_size):
+        conv1_params = self.calc_conv_params(in_channels, out_channels, filter_size)
+        bn1_params = self.calc_bn_params(out_channels)
+        conv2_params = self.calc_conv_params(out_channels, out_channels, filter_size)
+        bn2_params = self.calc_bn_params(out_channels)
+        return conv1_params + bn1_params + conv2_params + bn2_params
+
+    def calc_skip_connection_params(self, in_channels, out_channels):
+        conv1_params = self.calc_conv_params(in_channels, out_channels // 2, 1)
+        conv2_params = self.calc_conv_params(in_channels, out_channels // 2, 1)
+        bn_params = self.calc_bn_params(out_channels)
+        return conv1_params + conv2_params + bn_params
+
+    def calc_basic_block_params(self, in_channels, out_channels, filter_size, res_branches, use_skip):
+        branches_params = sum([self.calc_residual_branch_params(in_channels, out_channels, filter_size) for _ in range(res_branches)])
+        skip_params = self.calc_skip_connection_params(in_channels, out_channels) if use_skip else 0
+        return branches_params + skip_params
+
+    def calc_residual_group_params(self, in_channels, out_channels, n_blocks, filter_size, res_branches, use_skip):
+        return sum([self.calc_basic_block_params(in_channels if i == 0 else out_channels, out_channels, filter_size, res_branches, use_skip and i == 0) for i in range(n_blocks)])
+
+    def calc_total_params(self, config, input_dim=(3, 32, 32), classes=10):
+        print("Config: ", config)
+        out_channel0 = config["out_channel0"]
+        M = config["M"]
+        print("M: ", M)
+        R = [config[f"R{i+1}"] for i in range(M)]
+        widen_factors = [config[f"widenfact{i+1}"] for i in range(M)]
+        B = [config[f"B{i+1}"] for i in range(M)]
+
+        # Initial Conv and BN layer
+        total_params = self.calc_conv_params(3, out_channel0, 7) + self.calc_bn_params(out_channel0)
+
+        in_channels = out_channel0
+        for i in range(M):
+            out_channels = in_channels * widen_factors[i]
+            total_params += self.calc_residual_group_params(in_channels, out_channels, R[i], 3, B[i], in_channels != out_channels)
+            in_channels = out_channels
+
+        # Average pooling
+        feature_maps_out = in_channels
+        if M == 1:
+            fc_len = feature_maps_out * 21 * 21
+        elif M == 2:
+            fc_len = feature_maps_out * 21 * 21
+        else:
+            fc_len = feature_maps_out * 21 * 21  # Assuming average pooling down to 1x1 feature maps
+
+        # Fully connected layer
+        total_params += self.calc_fc_params(fc_len, classes)
+
+        return total_params

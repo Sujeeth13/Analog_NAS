@@ -106,7 +106,10 @@ class VQVAE_Env(gym.Env):
         surrogate_model,
         decoder,
         codebook,
+        consider_max_params = False, 
         consider_previous_actions=False,
+        max_params = 60000000,
+        min_params = 55426,
         num_previous_actions=4,
         render_mode="human",
         render_labels=None,
@@ -118,6 +121,9 @@ class VQVAE_Env(gym.Env):
         # Environment Parameters
         self.embed_dim = embed_dim  # dimension of the codebook and state vectors
         self.num_codebook_vectors = num_embeddings  # +1 for the stop action
+        self.min_params = min_params
+        self.max_params = max_params
+        self.consider_max_params = consider_max_params
         self.terminal_action = (
             self.embed_dim * self.num_codebook_vectors
         )  # index of the terminal action
@@ -139,7 +145,25 @@ class VQVAE_Env(gym.Env):
 
         # Observation space is now a tuple of the latent vector and action history
 
-        if self.consider_previous_actions:
+        if self.consider_previous_actions and consider_max_params:
+            self.observation_space = spaces.Dict(
+                {
+                    "latent_vector": spaces.Box(
+                        low=-np.inf,
+                        high=np.inf,
+                        shape=(self.embed_dim,),
+                        dtype=np.float32,
+                    ),
+                    "action_history": spaces.Box(
+                        low=-1,
+                        high=(self.num_codebook_vectors * self.embed_dim),
+                        shape=(self.num_previous_actions,),
+                        dtype=np.int32,
+                    ),
+                    "max_num_params": spaces.Discrete(self.max_params)
+                }
+            )
+        elif self.consider_previous_actions:
             self.observation_space = spaces.Dict(
                 {
                     "latent_vector": spaces.Box(
@@ -156,10 +180,24 @@ class VQVAE_Env(gym.Env):
                     ),
                 }
             )
+        elif self.consider_max_params:
+            self.observation_space = spaces.Dict(
+                {
+                    "latent_vector": spaces.Box(
+                        low=-np.inf,
+                        high=np.inf,
+                        shape=(self.embed_dim,),
+                        dtype=np.float32,
+                    ),
+                    "max_num_params": spaces.Discrete(self.max_params)
+                }
+            )
+            print('observation_space max', self.observation_space)
         else:
             self.observation_space = spaces.Box(
                 low=-np.inf, high=np.inf, shape=(self.embed_dim,), dtype=np.float32
             )
+            print('observation_space normal', self.observation_space)
 
         self.render_mode = render_mode
         self.render_labels = render_labels
@@ -270,19 +308,24 @@ class VQVAE_Env(gym.Env):
         return (0 <= codebook_number < self.num_codebook_vectors) and (
             0 <= codebook_index < self.embed_dim
         )
-
+    
     def calculate_reward(
         self,
     ):  # We can add alpha and beta hyperparameters, for defining the linear combination
         decoded_state = self.decoder(torch.from_numpy(self.state))  # Decode the state
         if decoded_state.dim() == 1:
             decoded_state = decoded_state.unsqueeze(0)
-        accuracy = self.surrogate_model.evaluate(
-            decoded_state
+        accuracy, model_params = self.surrogate_model.evaluate(
+            decoded_state, consider_max_params=self.consider_max_params,
         )  # Calculate the accuracy
-        reward = accuracy - self.previous_accuracy  # Reward is the change in accuracy
+        reward = 0
+        if self.consider_max_params:
+            if model_params > self.max_num_params:
+                reward = -1
+        
+        reward += (accuracy - self.previous_accuracy)[0]  # Reward is the change in accuracy
         self.previous_accuracy = accuracy  # Update the previous accuracy
-        return float(reward[0])  # TODO: FIXXX THISSSS!!!!!!!!
+        return float(reward)
 
     def reset(self, seed=None):
 
@@ -294,21 +337,42 @@ class VQVAE_Env(gym.Env):
             self.action_history = deque(
                 [-1] * self.num_previous_actions, maxlen=self.num_previous_actions
             )
+        
+        if self.consider_max_params:
+            self.max_num_params = torch.randint(low=self.min_params, high=self.max_params + 1, size=(1,)).item()
         self.step_count = 0
         self.previous_accuracy = 0.0  # Initial accuracy (assuming 0)
         self.is_episode_done = False
 
-        if self.consider_previous_actions:
+        if self.consider_previous_actions and self.consider_max_params:
             # Convert action_history deque to a numpy array and reshape
             action_history_array = np.array(
                 list(self.action_history), dtype=np.int32
             ).flatten()
 
-            # Update the observation state
             obs_state = {
-                "latent_vector": self.state,
-                "action_history": action_history_array,
-            }
+                    "latent_vector": self.state,
+                    "action_history": action_history_array,
+                    "max_num_params": self.max_num_params
+                }
+        elif self.consider_previous_actions:
+            # Convert action_history deque to a numpy array and reshape
+            action_history_array = np.array(
+                list(self.action_history), dtype=np.int32
+            ).flatten()
+
+            obs_state = {
+                    "latent_vector": self.state,
+                    "action_history": action_history_array,
+                }
+        
+        elif self.consider_max_params:
+            obs_state = {
+                    "latent_vector": self.state,
+                    "max_num_params": self.max_num_params
+                }
+            print("obs_state", obs_state)
+          
         else:
             obs_state = self.state
 
