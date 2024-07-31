@@ -77,6 +77,9 @@ class Trainer:
             "env_config": self.env_config,
             "decoder_config": self.decoder_config,
         }
+
+
+        print('Initializing WanderDB')
         # render_callback = RenderCallback(render_every=1)
         wandb_run = wandb.init(
             project=self.log_config["project"],
@@ -86,6 +89,9 @@ class Trainer:
             save_code=self.log_config["save_code"],
         )
 
+
+        print('Setting up Model')
+        print('Model Config:', self.model_config)
         # Setup Model
         if self.model_config["model"] == "PPO":
             self.model = PPO(
@@ -107,7 +113,9 @@ class Trainer:
             )
 
         # Reset env
+        print('Resetting Environment')
         self.env.reset()
+        print('Training Model')
         if custom_callback:
             self.model.learn(
                 total_timesteps=self.model_config["total_timesteps"],
@@ -122,6 +130,7 @@ class Trainer:
                 progress_bar=self.model_config["progress_bar"],
             )
         else:
+            print("Training Started")
             self.model.learn(
                 total_timesteps=self.model_config["total_timesteps"],
                 callback=[
@@ -151,6 +160,9 @@ class Trainer:
             render_data=self.env_config["render_data"],
             render_labels=self.env_config["render_labels"],
             log_dir=self.env_config["render_log_dir"],
+            consider_max_params=self.env_config["consider_max_params"],
+            max_params=self.env_config["max_params"],
+            min_params=self.env_config["min_params"],
         )
 
         env = Monitor(env)
@@ -195,7 +207,7 @@ class Trainer:
             print(f"Episode {i}")
             while not done:
                 if make_plot:
-                    if self.env_config["consider_previous_actions"]:
+                    if self.env_config["consider_previous_actions"] or self.env_config['consider_max_params']:
                         obs_list.append(obs["latent_vector"])
                     else:
                         obs_list.append(obs)
