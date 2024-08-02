@@ -164,7 +164,7 @@ class VQVAE_Env(gym.Env):
                         low = self.min_params,
                         high = self.max_params,
                         shape=(1,),
-                        dtype=np.int32
+                        dtype=np.int64
                     )
                 }
             )
@@ -198,7 +198,7 @@ class VQVAE_Env(gym.Env):
                         low = self.min_params,
                         high = self.max_params,
                         shape=(1,),
-                        dtype=np.int32
+                        dtype=np.int64
                     )
                 }
             )
@@ -366,7 +366,8 @@ class VQVAE_Env(gym.Env):
             )
         
         if self.consider_max_params:
-            self.max_num_params = np.random.randint(low=self.min_params, high=self.max_params + 1, size=(1,), dtype=np.int32)
+            #self.max_num_params = np.random.randint(low=self.min_params, high=self.max_params + 1, size=(1,), dtype=np.int32) # TODO: Commented out temporarily
+            self.max_num_params = np.array([self.min_params], dtype=np.int64)
         self.step_count = 0
         self.previous_accuracy = 0.0  # Initial accuracy (assuming 0)
         self.is_episode_done = False
