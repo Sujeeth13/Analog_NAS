@@ -182,7 +182,7 @@ class Trainer:
         elif self.model_config["model"] == "A2C":
             self.model = A2C.load(load_path)
 
-    def evaluate_accuracy(self, num_episodes=10, make_plot=False):
+    def evaluate_accuracy(self, num_episodes=10, make_plot=False): # TODO: FIX THISS!!!!!!
 
         max_accuracy = float("-inf")
         state_at_max_accuracy = None
@@ -196,7 +196,7 @@ class Trainer:
         for i in range(num_episodes):
             obs = self.env.reset()
             done = False
-            max_reward = 0
+            max_reward = float("-inf")
             max_action = None
             max_obs_state = None
             cum_reward = 0
@@ -219,6 +219,8 @@ class Trainer:
                     action
                 )  # Note: Should this be obs, rewards, done, truncated, info = self.env.step(action) instead? --> nope as done = truncated or terminated  based on SB3 VecEnv documentation: https://stable-baselines3.readthedocs.io/en/master/guide/vec_envs.html
                 num_steps += 1
+                print('reward: ', reward)
+                print('action: ', action)
 
                 # print("Reward Type:", type(reward))
                 # print("rewards:", reward)
@@ -244,7 +246,7 @@ class Trainer:
                 if max_reward < cum_reward:
                     max_reward = cum_reward
                     max_action = action
-                    if self.env_config["consider_previous_actions"]:
+                    if self.env_config["consider_previous_actions"] or self.env_config['consider_max_params']:
                         max_obs_state = obs[
                             "latent_vector"
                         ]  # TODO: Why is this not being used? Should it be used? or else we should just get rid of this part of the code
@@ -285,4 +287,4 @@ class Trainer:
         return state_at_max_accuracy
 
     def calculate_accuracy_for_decoded_state(self, decoded_state):
-        return self.surrogate_model.evaluate(decoded_state)[0]
+        return self.surrogate_model.evaluate(decoded_state)
