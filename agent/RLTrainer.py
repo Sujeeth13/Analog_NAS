@@ -102,6 +102,10 @@ class Trainer:
                 n_steps=self.model_config["n_steps"],
                 n_epochs=self.model_config["n_epochs"],
                 batch_size=self.model_config["batch_size"],
+                policy_kwargs = self.model_config["policy_kwargs"],
+                ent_coef= self.model_config["ent_coef"],
+                gae_lambda = self.model_config["gae_lambda"],
+
             )
         elif self.model_config["model"] == "A2C":
             self.model = A2C(
